@@ -1,1 +1,145 @@
+name: Build Telegram
 
+on:
+  workflow_dispatch:
+
+jobs:
+  build-telegram:
+    runs-on: windows-latest
+    timeout-minutes: 720
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          lfs: true
+
+      - name: Force sync all submodules
+        shell: cmd
+        run: |
+          echo "Syncing submodules..."
+          git submodule sync --recursive
+          echo "Updating submodules..."
+          git submodule update --init --recursive --force
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          sdk: '10.0.26100.0'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Restore dependencies cache (v12b)
+        id: cache-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ThirdParty
+            Libraries/win64
+          key: deps-${{ runner.os }}-${{ runner.arch }}-v12b
+          restore-keys: |
+            deps-${{ runner.os }}-${{ runner.arch }}-v12b
+
+      - name: Fail if dependencies cache not restored
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        shell: cmd
+        run: |
+          echo "ERROR: Dependencies cache v12b not found! Run Build Dependencies first."
+          exit /b 1
+
+      - name: Copy dependencies to parent directory
+        shell: powershell
+        run: |
+          $targetRoot = "D:\a\AyuGramDesktop"
+          if (Test-Path ThirdParty) { Copy-Item ThirdParty "$targetRoot\ThirdParty" -Recurse -Force -ErrorAction Stop }
+          if (Test-Path "Libraries\win64") {
+              New-Item "$targetRoot\Libraries\win64" -ItemType Directory -Force | Out-Null
+              Copy-Item "Libraries\win64\*" "$targetRoot\Libraries\win64" -Recurse -Force -ErrorAction Stop
+          }
+
+      - name: Verify dependencies are ready
+        shell: cmd
+        run: |
+          if not exist "D:\a\AyuGramDesktop\Libraries\win64\Qt-5.15.18\lib\Qt5Core.lib" (
+            echo "ERROR: Dependencies missing after copy!"
+            exit /b 1
+          )
+          echo "Dependencies are ready."
+
+      - name: Restore build cache (v2)
+        id: cache-build
+        uses: actions/cache/restore@v4
+        with:
+          path: out/win
+          key: build-${{ runner.os }}-${{ runner.arch }}-v2
+          restore-keys: |
+            build-${{ runner.os }}-${{ runner.arch }}-v2
+
+      - name: Set CL_MPCount for MSVC (global)
+        shell: cmd
+        run: echo CL_MPCount=1 >> %GITHUB_ENV%
+
+      - name: Increase pagefile
+        shell: powershell
+        run: |
+          Write-Host "Configuring pagefile (safe max)..."
+          $sys = Get-CimInstance Win32_ComputerSystem
+          Set-CimInstance -InputObject $sys -Property @{AutomaticManagedPagefile=$false}
+          $pf = Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue
+          $initial = 16384
+          $max     = 32768
+          if ($pf) {
+              Set-CimInstance -InputObject $pf -Property @{
+                  InitialSize = $initial
+                  MaximumSize = $max
+              }
+          } else {
+              New-CimInstance -ClassName Win32_PageFileSetting -Property @{
+                  Name = "C:\\pagefile.sys"
+                  InitialSize = $initial
+                  MaximumSize = $max
+              }
+          }
+          Write-Host "Pagefile set to 16-32 GB"
+
+      - name: Configure project (standard Release with /O2)
+        shell: cmd
+        run: |
+          cd Telegram
+          configure.bat x64 ^
+            -B ..\out\win ^
+            -D TDESKTOP_API_ID=2040 ^
+            -D TDESKTOP_API_HASH=b18441a1ff607e10a989891a5462e627 ^
+            -D TDESKTOP_USE_CRASHPAD=OFF ^
+            -D TDESKTOP_DISABLE_AUTOUPDATE=ON ^
+            -D CMAKE_BUILD_TYPE=Release ^
+            -D CMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF ^
+            -D CMAKE_CXX_FLAGS="/bigobj /O2 /DNDEBUG /D TDESKTOP_DISABLE_CRASH_REPORTS /D TDESKTOP_DISABLE_UPDATES /d2FH4" ^
+            -D CMAKE_EXE_LINKER_FLAGS="/DEBUG:NONE /LTCG:OFF" ^
+            -D CMAKE_VS_GLOBALS="MultiProcessorCompilation=false"
+
+      - name: Build (safe mode)
+        shell: cmd
+        run: |
+          cmake --build out\win --config Release -- /m:1
+
+      - name: Verify build output
+        shell: cmd
+        run: |
+          if not exist out\win\Release (
+            echo Build failed: output folder missing
+            exit /b 1
+          )
+          dir out\win\Release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AyuGram-Windows
+          path: out\win\Release
