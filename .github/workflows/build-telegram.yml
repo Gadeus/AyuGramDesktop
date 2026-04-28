@@ -72,15 +72,6 @@ jobs:
           )
           echo "Dependencies are ready."
 
-      - name: Restore build cache (v2)
-        id: cache-build
-        uses: actions/cache/restore@v4
-        with:
-          path: out/win
-          key: build-${{ runner.os }}-${{ runner.arch }}-v2
-          restore-keys: |
-            build-${{ runner.os }}-${{ runner.arch }}-v2
-
       - name: Set CL_MPCount for MSVC (global)
         shell: cmd
         run: echo CL_MPCount=1 >> %GITHUB_ENV%
