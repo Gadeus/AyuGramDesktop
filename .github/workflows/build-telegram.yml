@@ -72,6 +72,21 @@ jobs:
           )
           echo "Dependencies are ready."
 
+      # ИСПРАВЛЯЕМ ПРОБЛЕМУ PDB
+      - name: Fix CMAKE_MSVC_DEBUG_INFORMATION_FORMAT to Embedded (no external PDB)
+        shell: powershell
+        run: |
+          $varFile = "cmake\variables.cmake"
+          $content = Get-Content $varFile -Raw
+          if ($content -match 'CMAKE_MSVC_DEBUG_INFORMATION_FORMAT\s+"ProgramDatabase"') {
+              Write-Host "Replacing ProgramDatabase with Embedded..."
+              $content = $content -replace 'CMAKE_MSVC_DEBUG_INFORMATION_FORMAT\s+"ProgramDatabase"', 'CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "Embedded"'
+              Set-Content $varFile $content
+              Write-Host "Done."
+          } else {
+              Write-Host "Already set to something else, leaving as is."
+          }
+
       - name: Set CL_MPCount for MSVC (global)
         shell: cmd
         run: echo CL_MPCount=1 >> %GITHUB_ENV%
@@ -99,7 +114,7 @@ jobs:
           }
           Write-Host "Pagefile set to 16-32 GB"
 
-      - name: Configure project (Release WITHOUT debug info)
+      - name: Configure project (Release, no external PDB)
         shell: cmd
         run: |
           cd Telegram
@@ -110,7 +125,6 @@ jobs:
             -D TDESKTOP_USE_CRASHPAD=OFF ^
             -D TDESKTOP_DISABLE_AUTOUPDATE=ON ^
             -D CMAKE_BUILD_TYPE=Release ^
-            -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Off ^
             -D CMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF ^
             -D CMAKE_CXX_FLAGS="/bigobj /O2 /Ob0 /DNDEBUG /D TDESKTOP_DISABLE_CRASH_REPORTS /D TDESKTOP_DISABLE_UPDATES /d2FH4 /Zm300" ^
             -D CMAKE_EXE_LINKER_FLAGS="/DEBUG:NONE /LTCG:OFF" ^
