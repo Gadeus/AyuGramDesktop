@@ -1,10 +1,9 @@
-name: Windows.
+name: Windows test.
 
 on:
   push:
     branches:
-      - wss-mux
-      - ShultZ1400
+      - dev
     paths-ignore:
       - 'docs/**'
       - '**.md'
@@ -25,8 +24,7 @@ on:
       - 'Telegram/Telegram.plist'
   pull_request:
     branches:
-      - wss-mux
-      - ShultZ1400
+      - dev
     paths-ignore:
       - 'docs/**'
       - '**.md'
@@ -93,7 +91,7 @@ jobs:
       - name: First set up.
         shell: bash
         run: |
-          DOCPATH=$TBUILD/$REPO_NAME/docs/building-win.md
+          DOCPATH=$TBUILD/$REPO_NAME/docs/building-win-x64.md
           SDK="$(grep "SDK version" $DOCPATH | sed -r 's/.*\*\*(.*)\*\* SDK version.*/\1/')"
           echo "SDK=$SDK" >> $GITHUB_ENV
 
@@ -170,7 +168,7 @@ jobs:
       - name: Read configuration matrix.
         shell: bash
         run: |
-          ARTIFACT_NAME="Telegram"
+          ARTIFACT_NAME="AyuGram"
 
           ARCH=""
           if [ -n "${{ matrix.arch }}" ]; then
@@ -211,7 +209,7 @@ jobs:
           API="-D TDESKTOP_API_TEST=ON"
           if [ $GITHUB_REF == 'refs/heads/nightly' ]; then
             echo "Use the open credentials."
-            API="-D TDESKTOP_API_ID=611335 -D TDESKTOP_API_HASH=d524b414d21f4d37f08684c1df41ac9c"
+            API="-D TDESKTOP_API_ID=2040 -D TDESKTOP_API_HASH=b18441a1ff607e10a989891a5462e627"
           fi
           echo "TDESKTOP_BUILD_API=$API" >> $GITHUB_ENV
 
@@ -219,7 +217,7 @@ jobs:
         shell: bash
         run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' ')' -type f ')' -o -empty ')' -delete
 
-      - name: Telegram Desktop build.
+      - name: AyuGram build.
         if: env.ONLY_CACHE == 'false'
         run: |
           cd %TBUILD%\%REPO_NAME%\Telegram
@@ -243,8 +241,9 @@ jobs:
         run: |
           set OUT=%TBUILD%\%REPO_NAME%\out\Debug
           mkdir artifact
-          move %OUT%\Telegram.exe artifact/
-          move %OUT%\Updater.exe artifact/
+          if exist %OUT%\AyuGram.exe move %OUT%\AyuGram.exe artifact/
+          if exist %OUT%\Telegram.exe move %OUT%\Telegram.exe artifact/
+          if exist %OUT%\Updater.exe move %OUT%\Updater.exe artifact/
       - uses: actions/upload-artifact@v7
         name: Upload artifact.
         if: (env.UPLOAD_ARTIFACT == 'true') || (github.ref == 'refs/heads/nightly')
